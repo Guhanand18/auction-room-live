@@ -1,16 +1,33 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React, { useState, useEffect } from 'react';
+import { AuctionProvider, useAuction } from '@/context/AuctionContext';
+import { IPL_TEAMS, createTeam } from '@/data/teams';
+import LoginScreen from '@/components/LoginScreen';
+import Lobby from '@/components/Lobby';
+import AuctionRoom from '@/components/AuctionRoom';
+import EndScreen from '@/components/EndScreen';
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+function GameRouter() {
+  const { state } = useAuction();
+
+  switch (state.phase) {
+    case 'login':
+      return <LoginScreen />;
+    case 'lobby':
+      return <Lobby />;
+    case 'auction':
+    case 'mini-auction':
+      return <AuctionRoom />;
+    case 'ended':
+      return <EndScreen />;
+    default:
+      return <LoginScreen />;
+  }
+}
+
+export default function Index() {
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <AuctionProvider>
+      <GameRouter />
+    </AuctionProvider>
   );
-};
-
-const Index = PlaceholderIndex;
-
-export default Index;
+}
