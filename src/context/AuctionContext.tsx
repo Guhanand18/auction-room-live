@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react';
-import { GameState, GameAction, TeamInfo, Player, Bid, AuctionFeedEntry, PlayerCategory } from '@/types/auction';
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import { GameState, GameAction, TeamInfo, Player, Bid, AuctionFeedEntry, PlayerCategory, GamePhase } from '@/types/auction';
 import { createPlayerPool, getBidIncrement, formatPrice } from '@/data/players';
 import { IPL_TEAMS, createTeam } from '@/data/teams';
-import { shouldBotBid, getBotBidDelay } from '@/lib/botAI';
 
 const CATEGORY_ORDER: PlayerCategory[] = ['Batters', 'Wicket-Keepers', 'All-Rounders', 'Spinners', 'Fast Bowlers'];
 
@@ -55,7 +54,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'JOIN_ROOM': {
       const { name, teamId } = action.payload;
       const teams = state.teams.map(t =>
-        t.id === teamId ? { ...t, isBot: false, owner: name, botStrategy: undefined, botSpecialistRole: undefined } : t
+        t.id === teamId ? { ...t, isBot: false, owner: name } : t
       );
       return {
         ...state,
@@ -69,9 +68,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const pool = shuffleArray(createPlayerPool());
       const catPlayers = pool.filter(p => p.category === CATEGORY_ORDER[0]);
       const firstPlayer = catPlayers.length > 0 ? catPlayers[Math.floor(Math.random() * catPlayers.length)] : pool[0];
+
       const updatedPool = pool.map(p =>
         p.id === firstPlayer.id ? { ...p, status: 'current' as const } : p
       );
+
       return {
         ...state,
         phase: 'auction',
@@ -95,9 +96,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const team = state.teams.find(t => t.id === teamId);
       const player = state.currentPlayer;
       if (!team || !player) return state;
+
       const currentAmount = state.currentBid?.amount ?? player.basePrice;
       const newAmount = state.currentBid ? currentAmount + getBidIncrement(currentAmount) : player.basePrice;
+
       if (!canTeamBid(team, newAmount, player, state.currentBid)) return state;
+
       const newBid: Bid = { teamId, amount: newAmount, timestamp: Date.now() };
       return {
         ...state,
@@ -113,8 +117,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SELL_PLAYER': {
       const { currentPlayer, currentBid, teams, playerPool } = state;
       if (!currentPlayer || !currentBid) return state;
+
       const buyingTeam = teams.find(t => t.id === currentBid.teamId);
       if (!buyingTeam) return state;
+
       const soldPlayer: Player = { ...currentPlayer, status: 'sold', soldTo: currentBid.teamId, soldPrice: currentBid.amount };
       const updatedTeams = teams.map(t =>
         t.id === currentBid.teamId
@@ -127,6 +133,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           : t
       );
       const updatedPool = playerPool.map(p => (p.id === currentPlayer.id ? soldPlayer : p));
+
       return {
         ...state,
         teams: updatedTeams,
@@ -140,8 +147,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'UNSOLD_PLAYER': {
       const { currentPlayer, playerPool, unsoldPlayers } = state;
       if (!currentPlayer) return state;
+
       const unsoldPlayer: Player = { ...currentPlayer, status: 'unsold' };
       const updatedPool = playerPool.map(p => (p.id === currentPlayer.id ? unsoldPlayer : p));
+
       return {
         ...state,
         playerPool: updatedPool,
@@ -161,11 +170,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         const available = state.unsoldPlayers.filter(p => p.status === 'upcoming' || p.status === 'unsold');
         nextPlayer = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
       } else {
+        // Try current category
         const currentCat = CATEGORY_ORDER[state.categoryIndex];
         let available = state.playerPool.filter(p => p.category === currentCat && p.status === 'upcoming');
         if (available.length > 0) {
           nextPlayer = available[Math.floor(Math.random() * available.length)];
         } else {
+          // Move to next categories
           for (let i = state.categoryIndex + 1; i < CATEGORY_ORDER.length; i++) {
             available = state.playerPool.filter(p => p.category === CATEGORY_ORDER[i] && p.status === 'upcoming');
             if (available.length > 0) {
@@ -178,31 +189,39 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
+      // Check if main auction done → mini auction
       if (!nextPlayer && state.phase === 'auction') {
         const teamsNeedingPlayers = state.teams.filter(t => t.squad.length < 18);
         if (teamsNeedingPlayers.length > 0 && state.unsoldPlayers.length > 0) {
           const resetUnsold = state.unsoldPlayers.map(p => ({ ...p, status: 'upcoming' as const }));
           return {
-            ...state, phase: 'mini-auction', unsoldPlayers: resetUnsold, currentPlayer: null,
+            ...state,
+            phase: 'mini-auction',
+            unsoldPlayers: resetUnsold,
+            currentPlayer: null,
             miniAuctionTeams: teamsNeedingPlayers.map(t => t.id),
-            feed: [...newFeed, createFeedEntry('🔄 Mini-Auction Round begins!', 'system')],
+            feed: [...newFeed, createFeedEntry('🔄 Mini-Auction Round begins! Unsold players return.', 'system')],
           };
         }
         return { ...state, phase: 'ended', currentPlayer: null, feed: [...newFeed, createFeedEntry('🏆 The IPL Auction is complete!', 'system')] };
       }
+
       if (!nextPlayer) {
         return { ...state, phase: 'ended', currentPlayer: null, feed: [...newFeed, createFeedEntry('🏆 The IPL Auction is complete!', 'system')] };
       }
 
       const updatedPool = state.playerPool.map(p => (p.id === nextPlayer!.id ? { ...p, status: 'current' as const } : p));
       const updatedUnsold = state.unsoldPlayers.map(p => (p.id === nextPlayer!.id ? { ...p, status: 'current' as const } : p));
+
       newFeed.push(createFeedEntry(`🎤 ${nextPlayer.name} is up for auction! Base price: ${formatPrice(nextPlayer.basePrice)}`, 'announcement'));
 
       return {
         ...state,
-        playerPool: updatedPool, unsoldPlayers: updatedUnsold,
+        playerPool: updatedPool,
+        unsoldPlayers: updatedUnsold,
         currentPlayer: { ...nextPlayer, status: 'current' },
-        currentBid: null, timer: 15,
+        currentBid: null,
+        timer: 15,
         categoryIndex: newCategoryIndex,
         currentCategory: CATEGORY_ORDER[newCategoryIndex] || state.currentCategory,
         feed: newFeed,
@@ -211,10 +230,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'SET_PHASE':
       return { ...state, phase: action.payload };
+
     case 'ADD_FEED':
       return { ...state, feed: [...state.feed, createFeedEntry(action.payload.message, action.payload.type)] };
+
     case 'RESET':
       return createInitialState();
+
     default:
       return state;
   }
@@ -239,31 +261,23 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
   const [isHost, setIsHost] = React.useState(false);
   const [roomId, setRoomId] = React.useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const botTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const processingRef = useRef(false); // prevent double sell/unsold
+  const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear all bot timeouts
-  const clearBotTimeouts = useCallback(() => {
-    botTimeouts.current.forEach(t => clearTimeout(t));
-    botTimeouts.current = [];
-  }, []);
-
-  // Timer
+  // Timer logic
   useEffect(() => {
     if ((state.phase === 'auction' || state.phase === 'mini-auction') && state.currentPlayer) {
       timerRef.current = setInterval(() => {
         dispatch({ type: 'TIMER_TICK' });
       }, 1000);
-      return () => { if (timerRef.current) clearInterval(timerRef.current); };
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+      };
     }
   }, [state.phase, state.currentPlayer?.id]);
 
-  // Handle timer expiry — use ref to prevent double processing
+  // Handle timer expiry
   useEffect(() => {
-    if (state.timer === 0 && state.currentPlayer && !processingRef.current) {
-      processingRef.current = true;
-      clearBotTimeouts();
-      
+    if (state.timer === 0 && state.currentPlayer) {
       if (state.currentBid) {
         dispatch({ type: 'SELL_PLAYER' });
       } else {
@@ -271,17 +285,14 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
       }
       setTimeout(() => {
         dispatch({ type: 'NEXT_PLAYER' });
-        processingRef.current = false;
       }, 1500);
     }
-  }, [state.timer, state.currentPlayer?.id]);
+  }, [state.timer, state.currentPlayer, state.currentBid]);
 
-  // Smart Bot Bidding — triggers on new player or new bid
+  // Bot bidding logic
   useEffect(() => {
     if ((state.phase !== 'auction' && state.phase !== 'mini-auction') || !state.currentPlayer) return;
     if (state.timer <= 0) return;
-
-    clearBotTimeouts();
 
     const botTeams = state.teams.filter(t => t.isBot);
     if (botTeams.length === 0) return;
@@ -290,27 +301,24 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     const currentAmount = state.currentBid?.amount ?? player.basePrice;
     const nextBidAmount = state.currentBid ? currentAmount + getBidIncrement(currentAmount) : player.basePrice;
 
-    // Schedule each bot independently with different delays
-    botTeams.forEach(bot => {
-      if (!canTeamBid(bot, nextBidAmount, player, state.currentBid)) return;
+    botTimerRef.current = setTimeout(() => {
+      const interestedBots = botTeams.filter(bot => {
+        if (!canTeamBid(bot, nextBidAmount, player, state.currentBid)) return false;
+        const ceiling = player.basePrice * (1.5 + Math.random());
+        if (nextBidAmount > ceiling) return false;
+        return Math.random() < 0.4;
+      });
 
-      const delay = getBotBidDelay();
-      const timeout = setTimeout(() => {
-        // Re-check eligibility at bid time (state may have changed via other bids)
-        const { interested } = shouldBotBid(
-          { teamId: bot.id, strategy: bot.botStrategy || 'balanced', specialistRole: bot.botSpecialistRole, temperament: 0.5 },
-          bot, player, state.currentBid, nextBidAmount
-        );
-        if (interested) {
-          dispatch({ type: 'BOT_BID', payload: { teamId: bot.id } });
-        }
-      }, delay);
+      if (interestedBots.length > 0) {
+        const bidder = interestedBots[Math.floor(Math.random() * interestedBots.length)];
+        dispatch({ type: 'BOT_BID', payload: { teamId: bidder.id } });
+      }
+    }, 2000 + Math.random() * 3000);
 
-      botTimeouts.current.push(timeout);
-    });
-
-    return clearBotTimeouts;
-  }, [state.phase, state.currentPlayer?.id, state.currentBid?.teamId, state.currentBid?.amount]);
+    return () => {
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    };
+  }, [state.phase, state.currentPlayer?.id, state.currentBid, state.timer]);
 
   return (
     <AuctionContext.Provider value={{ state, dispatch, myTeamId, isHost, setMyTeamId, setIsHost, roomId, setRoomId }}>

@@ -9,31 +9,27 @@ export interface Player {
   role: PlayerRole;
   category: PlayerCategory;
   nationality: Nationality;
-  basePrice: number;
+  basePrice: number; // in lakhs
   status: PlayerStatus;
-  soldTo?: string;
-  soldPrice?: number;
+  soldTo?: string; // team id
+  soldPrice?: number; // in lakhs
 }
-
-export type BotStrategyType = 'aggressive' | 'balanced' | 'budget' | 'specialist';
 
 export interface TeamInfo {
   id: string;
   name: string;
   shortName: string;
-  color: string;
-  purse: number;
+  color: string; // HSL string for team accent
+  purse: number; // in lakhs (12000 = 120 Cr)
   squad: Player[];
   overseasCount: number;
   isBot: boolean;
-  owner?: string;
-  botStrategy?: BotStrategyType;
-  botSpecialistRole?: PlayerCategory;
+  owner?: string; // player name
 }
 
 export interface Bid {
   teamId: string;
-  amount: number;
+  amount: number; // in lakhs
   timestamp: number;
 }
 
