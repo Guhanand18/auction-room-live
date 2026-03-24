@@ -8,7 +8,7 @@ import AuctionFeed from './AuctionFeed';
 import { PlayerCategory } from '@/types/auction';
 
 export default function AuctionRoom() {
-  const { state, dispatch, myTeamId } = useAuction();
+  const { state, dispatch, myTeamId, roomId } = useAuction();
   const [poolCategory, setPoolCategory] = useState<PlayerCategory | 'All'>('All');
 
   const myTeam = state.teams.find(t => t.id === myTeamId);
