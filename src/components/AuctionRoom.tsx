@@ -38,7 +38,7 @@ export default function AuctionRoom() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
