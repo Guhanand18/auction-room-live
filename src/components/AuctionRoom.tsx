@@ -38,7 +38,7 @@ export default function AuctionRoom() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -54,9 +54,9 @@ export default function AuctionRoom() {
       </div>
 
       {/* Main layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Left: Player Pool */}
-        <div className="w-64 border-r border-border p-3 overflow-hidden">
+        <div className="w-72 border-r border-border p-3 flex flex-col min-h-0">
           <PlayerPool
             players={state.playerPool}
             currentCategory={poolCategory}
