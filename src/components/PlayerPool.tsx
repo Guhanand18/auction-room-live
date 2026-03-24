@@ -28,7 +28,7 @@ export default function PlayerPool({ players, currentCategory, onCategoryChange 
   const filtered = currentCategory === 'All' ? players : players.filter(p => p.category === currentCategory);
 
   return (
-    <div className="auction-card h-full flex flex-col overflow-hidden">
+    <div className="flex flex-col min-h-0 h-full">
       <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Player Pool</h3>
       
       {/* Category tabs */}
