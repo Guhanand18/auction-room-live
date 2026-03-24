@@ -48,7 +48,7 @@ export default function PlayerPool({ players, currentCategory, onCategoryChange 
         ))}
       </div>
 
-      <div className="overflow-y-auto scrollbar-thin flex-1 space-y-0.5">
+      <div className="overflow-y-auto scrollbar-thin flex-1 min-h-0 space-y-0.5">
         {filtered.map(player => (
           <div
             key={player.id}
