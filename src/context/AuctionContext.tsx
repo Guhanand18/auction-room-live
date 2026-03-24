@@ -5,10 +5,6 @@ import { IPL_TEAMS, createTeam } from '@/data/teams';
 
 const CATEGORY_ORDER: PlayerCategory[] = ['Batters', 'Wicket-Keepers', 'All-Rounders', 'Spinners', 'Fast Bowlers'];
 
-function generateRoomId(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
 function createFeedEntry(message: string, type: AuctionFeedEntry['type']): AuctionFeedEntry {
   return { id: `feed-${Date.now()}-${Math.random()}`, message, type, timestamp: Date.now() };
 }
@@ -22,54 +18,36 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
-function pickNextPlayer(state: GameState): Player | null {
-  const { playerPool, categoryIndex, categoryOrder, miniAuctionTeams, unsoldPlayers, phase } = state;
-  
-  if (phase === 'mini-auction') {
-    const available = unsoldPlayers.filter(p => p.status === 'upcoming' || p.status === 'unsold');
-    if (available.length === 0) return null;
-    return available[Math.floor(Math.random() * available.length)];
-  }
-
-  const currentCat = categoryOrder[categoryIndex];
-  if (!currentCat) return null;
-  
-  const available = playerPool.filter(p => p.category === currentCat && p.status === 'upcoming');
-  if (available.length > 0) {
-    return available[Math.floor(Math.random() * available.length)];
-  }
-  return null;
-}
-
 function canTeamBid(team: TeamInfo, bidAmount: number, player: Player, currentBid: Bid | null): boolean {
   if (team.squad.length >= 25) return false;
   if (team.purse < bidAmount) return false;
   if (player.nationality === 'Overseas' && team.overseasCount >= 8) return false;
   if (currentBid && currentBid.teamId === team.id) return false;
-  // Check minimum purse for remaining squad slots
-  const remainingSlots = 18 - team.squad.length - 1; // -1 for current player
+  const remainingSlots = 18 - team.squad.length - 1;
   if (remainingSlots > 0) {
-    const minNeeded = remainingSlots * 20; // minimum 20L per player
+    const minNeeded = remainingSlots * 20;
     if (team.purse - bidAmount < minNeeded) return false;
   }
   return true;
 }
 
-const initialState: GameState = {
-  roomId: '',
-  phase: 'login',
-  teams: [],
-  playerPool: [],
-  currentPlayer: null,
-  currentBid: null,
-  timer: 15,
-  feed: [],
-  currentCategory: 'All',
-  categoryOrder: CATEGORY_ORDER,
-  categoryIndex: 0,
-  unsoldPlayers: [],
-  miniAuctionTeams: [],
-};
+function createInitialState(): GameState {
+  return {
+    roomId: '',
+    phase: 'login',
+    teams: IPL_TEAMS.map(t => createTeam(t, true)),
+    playerPool: [],
+    currentPlayer: null,
+    currentBid: null,
+    timer: 15,
+    feed: [],
+    currentCategory: 'All',
+    categoryOrder: CATEGORY_ORDER,
+    categoryIndex: 0,
+    unsoldPlayers: [],
+    miniAuctionTeams: [],
+  };
+}
 
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
@@ -81,6 +59,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         teams,
+        phase: 'lobby',
         feed: [...state.feed, createFeedEntry(`${name} joined as ${teams.find(t => t.id === teamId)?.name}!`, 'system')],
       };
     }
@@ -89,7 +68,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const pool = shuffleArray(createPlayerPool());
       const catPlayers = pool.filter(p => p.category === CATEGORY_ORDER[0]);
       const firstPlayer = catPlayers.length > 0 ? catPlayers[Math.floor(Math.random() * catPlayers.length)] : pool[0];
-      
+
       const updatedPool = pool.map(p =>
         p.id === firstPlayer.id ? { ...p, status: 'current' as const } : p
       );
@@ -132,9 +111,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
-    case 'TIMER_TICK': {
+    case 'TIMER_TICK':
       return { ...state, timer: Math.max(0, state.timer - 1) };
-    }
 
     case 'SELL_PLAYER': {
       const { currentPlayer, currentBid, teams, playerPool } = state;
@@ -184,24 +162,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'NEXT_PLAYER': {
-      let nextPlayer = pickNextPlayer(state);
+      let nextPlayer: Player | null = null;
       let newCategoryIndex = state.categoryIndex;
-      let newFeed = [...state.feed];
+      const newFeed = [...state.feed];
 
-      // If no player in current category, move to next
-      if (!nextPlayer && state.phase === 'auction') {
-        for (let i = state.categoryIndex + 1; i < CATEGORY_ORDER.length; i++) {
-          const catPlayers = state.playerPool.filter(p => p.category === CATEGORY_ORDER[i] && p.status === 'upcoming');
-          if (catPlayers.length > 0) {
-            newCategoryIndex = i;
-            nextPlayer = catPlayers[Math.floor(Math.random() * catPlayers.length)];
-            newFeed.push(createFeedEntry(`📢 Category: ${CATEGORY_ORDER[i]}`, 'system'));
-            break;
+      if (state.phase === 'mini-auction') {
+        const available = state.unsoldPlayers.filter(p => p.status === 'upcoming' || p.status === 'unsold');
+        nextPlayer = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+      } else {
+        // Try current category
+        const currentCat = CATEGORY_ORDER[state.categoryIndex];
+        let available = state.playerPool.filter(p => p.category === currentCat && p.status === 'upcoming');
+        if (available.length > 0) {
+          nextPlayer = available[Math.floor(Math.random() * available.length)];
+        } else {
+          // Move to next categories
+          for (let i = state.categoryIndex + 1; i < CATEGORY_ORDER.length; i++) {
+            available = state.playerPool.filter(p => p.category === CATEGORY_ORDER[i] && p.status === 'upcoming');
+            if (available.length > 0) {
+              newCategoryIndex = i;
+              nextPlayer = available[Math.floor(Math.random() * available.length)];
+              newFeed.push(createFeedEntry(`📢 Category: ${CATEGORY_ORDER[i]}`, 'system'));
+              break;
+            }
           }
         }
       }
 
-      // Check if main auction is done → mini auction
+      // Check if main auction done → mini auction
       if (!nextPlayer && state.phase === 'auction') {
         const teamsNeedingPlayers = state.teams.filter(t => t.squad.length < 18);
         if (teamsNeedingPlayers.length > 0 && state.unsoldPlayers.length > 0) {
@@ -218,11 +206,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, phase: 'ended', currentPlayer: null, feed: [...newFeed, createFeedEntry('🏆 The IPL Auction is complete!', 'system')] };
       }
 
-      if (!nextPlayer && state.phase === 'mini-auction') {
+      if (!nextPlayer) {
         return { ...state, phase: 'ended', currentPlayer: null, feed: [...newFeed, createFeedEntry('🏆 The IPL Auction is complete!', 'system')] };
       }
-
-      if (!nextPlayer) return { ...state, phase: 'ended', currentPlayer: null };
 
       const updatedPool = state.playerPool.map(p => (p.id === nextPlayer!.id ? { ...p, status: 'current' as const } : p));
       const updatedUnsold = state.unsoldPlayers.map(p => (p.id === nextPlayer!.id ? { ...p, status: 'current' as const } : p));
@@ -249,7 +235,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, feed: [...state.feed, createFeedEntry(action.payload.message, action.payload.type)] };
 
     case 'RESET':
-      return { ...initialState };
+      return createInitialState();
 
     default:
       return state;
@@ -263,28 +249,19 @@ interface AuctionContextValue {
   isHost: boolean;
   setMyTeamId: (id: string | null) => void;
   setIsHost: (v: boolean) => void;
-  initRoom: (roomId?: string) => string;
+  roomId: string;
+  setRoomId: (id: string) => void;
 }
 
 const AuctionContext = createContext<AuctionContextValue | null>(null);
 
 export function AuctionProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(gameReducer, initialState);
+  const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
   const [myTeamId, setMyTeamId] = React.useState<string | null>(null);
   const [isHost, setIsHost] = React.useState(false);
+  const [roomId, setRoomId] = React.useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const initRoom = useCallback((existingRoomId?: string) => {
-    const roomId = existingRoomId || generateRoomId();
-    const teams = IPL_TEAMS.map(t => createTeam(t, true));
-    dispatch({ type: 'RESET' });
-    // We need to set the state directly after reset
-    setTimeout(() => {
-      dispatch({ type: 'SET_PHASE', payload: 'lobby' });
-    }, 0);
-    return roomId;
-  }, []);
 
   // Timer logic
   useEffect(() => {
@@ -306,7 +283,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
       } else {
         dispatch({ type: 'UNSOLD_PLAYER' });
       }
-      // Move to next player after a short delay
       setTimeout(() => {
         dispatch({ type: 'NEXT_PLAYER' });
       }, 1500);
@@ -326,7 +302,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     const nextBidAmount = state.currentBid ? currentAmount + getBidIncrement(currentAmount) : player.basePrice;
 
     botTimerRef.current = setTimeout(() => {
-      // Each bot has 40% chance of being interested
       const interestedBots = botTeams.filter(bot => {
         if (!canTeamBid(bot, nextBidAmount, player, state.currentBid)) return false;
         const ceiling = player.basePrice * (1.5 + Math.random());
@@ -346,7 +321,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
   }, [state.phase, state.currentPlayer?.id, state.currentBid, state.timer]);
 
   return (
-    <AuctionContext.Provider value={{ state, dispatch, myTeamId, isHost, setMyTeamId, setIsHost, initRoom }}>
+    <AuctionContext.Provider value={{ state, dispatch, myTeamId, isHost, setMyTeamId, setIsHost, roomId, setRoomId }}>
       {children}
     </AuctionContext.Provider>
   );

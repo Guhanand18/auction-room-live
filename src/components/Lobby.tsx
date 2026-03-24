@@ -1,9 +1,8 @@
 import React from 'react';
 import { useAuction } from '@/context/AuctionContext';
-import { createPlayerPool } from '@/data/players';
 
 export default function Lobby() {
-  const { state, dispatch, myTeamId, isHost } = useAuction();
+  const { state, dispatch, myTeamId, isHost, roomId } = useAuction();
 
   const humanCount = state.teams.filter(t => !t.isBot).length;
 
@@ -17,7 +16,7 @@ export default function Lobby() {
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gold-gradient mb-1">Auction Lobby</h1>
           <p className="text-muted-foreground text-sm">
-            Room: <span className="mono-numbers text-primary font-bold tracking-widest">{state.roomId}</span>
+            Room: <span className="mono-numbers text-primary font-bold tracking-widest text-lg">{roomId}</span>
           </p>
           <p className="text-muted-foreground text-xs mt-1">Share this code with friends to join!</p>
         </div>
@@ -26,7 +25,7 @@ export default function Lobby() {
           {state.teams.map(team => (
             <div
               key={team.id}
-              className={`flex items-center justify-between p-3 rounded-lg border ${
+              className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                 team.id === myTeamId
                   ? 'border-primary bg-primary/10'
                   : 'border-border bg-secondary'
@@ -38,11 +37,11 @@ export default function Lobby() {
                   style={{ backgroundColor: `hsl(${team.color})` }}
                 />
                 <span className="font-bold text-sm">{team.shortName}</span>
-                <span className="text-muted-foreground text-xs">{team.name}</span>
+                <span className="text-muted-foreground text-xs hidden sm:inline">{team.name}</span>
               </div>
               <div>
                 {team.isBot ? (
-                  <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">[BOT]</span>
+                  <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground font-mono">[BOT]</span>
                 ) : (
                   <span className="text-xs px-2 py-1 rounded bg-accent/20 text-accent font-semibold">
                     {team.owner}
@@ -56,7 +55,7 @@ export default function Lobby() {
 
         <div className="text-center space-y-3">
           <p className="text-sm text-muted-foreground">
-            {humanCount} player{humanCount !== 1 ? 's' : ''} joined · {8 - humanCount} bot{8 - humanCount !== 1 ? 's' : ''}
+            {humanCount} player{humanCount !== 1 ? 's' : ''} joined · {8 - humanCount} bot slot{8 - humanCount !== 1 ? 's' : ''}
           </p>
           {isHost ? (
             <button
