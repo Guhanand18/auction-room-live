@@ -36,7 +36,11 @@ export default function TeamPanel({ teams, myTeamId, currentLeaderId }: Props) {
                   style={{ backgroundColor: `hsl(${team.color})` }}
                 />
                 <span className="font-bold text-xs">{team.shortName}</span>
-                {team.isBot && <span className="text-[10px] text-muted-foreground">[BOT]</span>}
+                {team.isBot && (
+                  <span className="text-[9px] text-muted-foreground">
+                    [{team.botStrategy === 'aggressive' ? '🔥AGG' : team.botStrategy === 'budget' ? '💰BDG' : team.botStrategy === 'specialist' ? '🎯SPE' : '⚖️BAL'}]
+                  </span>
+                )}
                 {team.id === myTeamId && <span className="text-[10px] text-accent">YOU</span>}
               </div>
               <span className="mono-numbers text-xs text-primary">{formatPrice(team.purse)}</span>
