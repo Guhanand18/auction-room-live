@@ -49,7 +49,7 @@ export default function AuctionRoom() {
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>Category: <span className="text-foreground font-bold">{state.currentCategory}</span></span>
-          <span>Room: <span className="mono-numbers text-primary">{state.roomId}</span></span>
+          <span>Room: <span className="mono-numbers text-primary">{roomId}</span></span>
         </div>
       </div>
 
